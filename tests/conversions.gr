@@ -1,0 +1,51 @@
+
+
+NoErr("rounding down", round(3.14), "3")
+NoErr("rounding up", round(3.7), "4")
+NoErr("rounding neg", round(-3.7), "-4")
+
+IsErr("rounding error", round(pow(2, 65)), "out of range")
+
+NoErr("truncation", int(3.7), "3")
+NoErr("truncation neg", int(-3.7), "-3")
+
+IsErr("truncation error", int(-pow(2, 65)), "out of range")
+
+NoErr("abs -3.7", abs(-3.7), "3.7")
+
+if int("-123") != -123 {
+	error("int(\"-123\") != -123")
+}
+
+Assert("trunc() is float", trunc(3.7) == 3.)
+Assert("trunc() is float", trunc(3.7) != 3)
+Assert("trunc() no overflow", trunc(pow(2, 65)) == pow(2, 65))
+Assert("int() is int", int(3.7) == 3)
+Assert("int(true) is 1", int(true) == 1)
+Assert("int(false) is 0", int(false) == 0)
+Assert("int(nil) is 0", int(nil) == 0)
+Assert("int(\"\") is 0", int("") == 0)
+Assert("int() with trim() whitespaces work", int(trim("\n  123\n\t")) == 123)
+Assert("int(\"0\") is 0", int("0") == 0)
+Assert("int(\"0xa\") is 10", int("0xa") == 10)           // hex still working despite leading 0 handling
+Assert("int(\"0755\") octal is 493", int("0755") == 493) // octal still working despite leading 0 handling
+
+// Unrelated for small test for existence of stuff
+func Exists(x) {
+	// log(info.globals)
+	info.globals[x] == true
+}
+Assert("exists false before we set foo", Exists("foo") == false)
+foo=42
+Assert("exists true after we set foo", Exists("foo") == true)
+
+// test utf8
+Assert("utf8 ascii valid", utf8(bytes("hello")) == "hello")
+Assert("utf8 accentuated character", len(bytes("é")) == 2)
+Assert("utf8 accentuated character", utf8(bytes("é")) == "é")
+Assert("utf8 3 bytes asian character", bytes("乒乓") == [228,185,146,228,185,147])
+Assert("truncated invalid utf8", utf8(bytes("é")[0 : 1], false) == "\xc3")
+IsErr("utf8 ascii invalid", utf8(bytes("é")[0 : 1], true), "utf8: invalid utf8 sequence")
+IsErr("utf8 byte out of range", utf8([256]), "invalid byte value 256")
+IsErr("utf8 byte out of range", utf8([-129]), "invalid byte value -129")
+Assert("utf8 signed byte in range", utf8([-128]) == "\x80")

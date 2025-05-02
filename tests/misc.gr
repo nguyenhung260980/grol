@@ -1,0 +1,68 @@
+// comments in function parameters and arrays
+
+// Parser tests for comments in function parameters and arrays (#327)
+func foo(a, b, c) {a+b+c}
+
+Assert("	foo(1, 2, 3)", foo(1, 2, 3) == 6)
+
+Assert("foo(1, /* comment */ 2, 3)", foo(1, /* comment */ 2, 3) == 6)
+
+Assert("foo(1, // first\n	2, // second\n	3)", foo(1,
+	 // first
+	2, // second
+	// another one
+	3 // last one
+	) == 6)
+
+del(xy) // make sure xy is not defined
+x=1
+y=2
+// should not parse to xy #325
+x y
+
+println("y is", y)
+
+// small array
+a=[3,-7,4,-42]
+Assert("sorting an array", sort(a) == [-42,-7,3,4])
+// un modified array
+Assert("un modified array", a == [3,-7,4,-42])
+
+// big array
+a=1:21
+s=shuffle(a)
+// also checks we didn't modify the original array
+Assert("shuffling an array", s != a)
+Assert("sorting shuffled array", sort(s) == a)
+// check sort didn't modify the s big array
+Assert("shuffling an array", s != a)
+
+
+// empty lambda shouldn't crash
+emptylambda = () => {}
+
+emptylambda()
+
+// Test boolean values in lambda functions and dereferencing
+// Basic lambda with boolean
+func g(x) {func f() {if x {1} else {2}}; f()}
+Assert("boolean in lambda", g(true) == 1)
+Assert("boolean in lambda false", g(false) == 2)
+
+// Nested lambda with boolean
+func h(x) {func f() {func g() {if x {1} else {2}}; g()}; f()}
+log("h=",h(true))
+Assert("boolean in nested lambda", h(true) == 1)
+log("h=",h(false))
+// BUG TODO/FIXME: g() inside f() is getting memoized/cached when it shouldn't be
+// Assert("boolean in nested lambda false", h(false) == 2)
+
+// Lambda with boolean in for loop
+func i(x) {func f() {for x {return 1}; return 2}; f()}
+Assert("boolean in lambda for loop", i(true) == 1)
+Assert("boolean in lambda for loop false", i(false) == 2)
+
+// Lambda with index in range
+func j(x) {func f() {for i = 1:x {i}}; f()}
+Assert("boolean in lambda range", j(12) == 11)
+Assert("boolean in lambda range false", j(13) == 12)

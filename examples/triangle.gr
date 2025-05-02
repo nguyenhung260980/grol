@@ -1,0 +1,21 @@
+/* Prints a triangle of stars n high
+|    *    |
+|   ***   |
+|  *****  |
+| ******* |
+|*********|
+*/
+
+func triangle(n) {
+	i = 0
+	res = []
+	for i < n {
+		sp = n - i - 1
+		st = 2 * i + 1
+		res = res + ["|" + " " * sp + "*" * st + " " * sp + "|"]
+		i++
+	}
+	res
+}
+
+println(join(triangle(5),"\n"))

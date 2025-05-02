@@ -1,0 +1,4 @@
+// - Test constants
+
+NoErr("PI should exist", PI, "3.141592")
+IsErr("Can't change a constant", PI++, "attempt to change constant PI")

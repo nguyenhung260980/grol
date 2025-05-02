@@ -1,0 +1,188 @@
+// Output input string sourounded by rounded corner box
+
+box = {
+    "topLeft": "╭",
+    "topRight": "╮",
+    "bottomLeft": "╰",
+    "bottomRight": "╯",
+    "horizontal": "─",
+    "vertical": "│",
+
+    "topT": "┬",
+    "bottomT": "┴",
+    "leftT": "├",
+    "rightT": "┤",
+    "middleCross": "┼",
+}
+
+func apply(f, a) {
+    if (len(a)==0) {
+        []
+    } else {
+        [f(first(a))]+apply(f,rest(a))
+    }
+}
+
+
+func boxTextInternal(s, lenFunc) {
+	lines = split(s, "\n")
+	// get max
+	maxLen = max(apply(x => lenFunc(x), lines))
+	// Create the top line
+	println(box.topLeft + box.horizontal * maxLen + box.topRight)
+	// Create the middle lines
+	apply(func(x) {
+		pad = maxLen - lenFunc(x)
+		leftPad = pad / 2
+		rightPad = pad - leftPad
+		println(box.vertical + (" "*leftPad) + x +  (" "*rightPad)+ box.vertical)}, lines)
+	// Create the bottom line
+	println(box.bottomLeft + box.horizontal * maxLen + box.bottomRight)
+}
+
+func boxTextTerm(s) {
+	// Get the width of the string (including double width runes)
+	boxTextInternal(s, width)
+}
+
+func boxTextWeb(s) {
+	// Just use rune count for web
+	boxTextInternal(s, rune_len)
+}
+
+testStr = `ABC😀
+Hello World 乒乓
+Shorter text.
+also   short`
+
+boxTextTerm(testStr)
+
+// matrix
+
+func matrixWidths(matrix) {
+    apply(row => apply(item => width(str(item)), row), matrix)
+}
+
+func forRecursive(n, f, start) {
+    nn:=n
+    (i,f,x) => { // internal lambda with the index param and intermediate result
+       r = f(i,x)
+       if (i>=nn) {
+           return r
+       }
+       self(i+1, f,r)
+    }(1,f,start)
+}
+
+func maxWidths(widths) {
+    cols := len(widths[0])
+    colIndices := 0:cols // Generates [0, 1, 2] for 3 columns
+    apply(colIndex => max(apply( row => row[colIndex], widths)), colIndices)
+}
+
+func createRowArray(row, maxWidths) {
+    rowArr = forRecursive(len(row), func(colIndex, rowContent) {
+        colIndex--
+        cell = str(row[colIndex])
+        pad = maxWidths[colIndex] - width(cell)
+        leftPad = pad / 2
+        rightPad = pad - leftPad
+        cellContent = " " * leftPad + cell + " " * rightPad
+        if colIndex < len(row) - 1 {
+            cellContent = cellContent + box.vertical
+        }
+        rowContent + cellContent
+    }, [])
+    return [box.vertical + join(rowArr) + box.vertical]
+}
+
+func boxMatrixA(matrix) {
+    widths = matrixWidths(matrix)
+    maxes = maxWidths(widths)
+
+    // Top line
+    topLine = box.topLeft + join(apply(w => box.horizontal * w,
+        maxes), box.topT) + box.topRight
+    lines = [topLine]
+
+    // Middle content (rows and separators)
+    lines = forRecursive(len(matrix), func(rowIndex, lines) {
+        rowIndex--
+        rowArr = createRowArray(matrix[rowIndex], maxes)
+        lines = lines + rowArr
+
+        if rowIndex < len(matrix) - 1 {
+            separatorLine = box.leftT + join(apply( w => box.horizontal * w,
+                maxes), box.middleCross) + box.rightT
+            lines = lines + [separatorLine]
+        }
+        lines
+    }, lines)
+
+    // Bottom line
+    bottomLine = box.bottomLeft + join(apply(w => box.horizontal * w,
+        maxes), box.bottomT) + box.bottomRight
+    lines + [bottomLine]
+}
+
+func boxMatrix(matrix) {
+	lines = boxMatrixA(matrix)
+	println(join(lines, "\n"))
+}
+
+
+func joinBoxes(boxes) {
+    numRows = len(boxes[0]) // Assuming all boxes have the same number of lines
+    forRecursive(numRows, func(rowIndex, combinedLines) {
+        rowIndex--
+        combinedLine = join(apply(box => box[rowIndex],
+            boxes), "  ") // Add some spacing between boxes
+        combinedLines + [combinedLine]
+    }, [])
+}
+
+
+matrix = [
+	["a", "bcde","😀"],
+	[123, 45,    "6"],
+	["xyz","hello","world"]
+]
+
+println("For", matrix)
+boxMatrix(matrix)
+
+// Example usage for tic-tac-toe board
+X = "X"
+O = "O"
+e = " "
+
+game = [
+[
+	[e, e, e],
+	[e, X, e],
+	[e, e, e]
+],
+[
+	[e, e, e],
+	[e, X, e],
+	[e, O, e]
+],
+[
+	[e, e, e],
+	[e, X, e],
+	[e, O, X]
+],
+[
+	[e, O, e],
+	[e, X, e],
+	[e, O, X]
+],
+[
+	[X, O, e],
+	[e, X, e],
+	[e, O, X]
+]]
+
+combinedOutput = joinBoxes(apply(board=>boxMatrixA(board), game))
+
+println(join(combinedOutput, "\n"))

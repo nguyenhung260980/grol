@@ -1,0 +1,34 @@
+// Script to list help text for all built-in Go functions (gofuncs)
+
+println("--- Built-in Go Functions (gofuncs) Help ---")
+// Iterate through the sorted list of function names
+mapres := {}
+for name := info.gofuncs {
+    helpstr := str(eval(name))
+    res := regexp("^(.+)// \\[([^]]+)\\](.*)$", helpstr, true)
+    if len(res) != 4 {
+        log("ERR parsing help string for " + name + " " + helpstr)
+        continue
+    }
+    categ := res[2]
+    // Uppercase first letter
+    categ = sprintf("%c", categ[0]-0x20) + categ[1:]
+    if categ == "Io" {
+        categ = "IO"
+    }
+    helpstr = res[1] + ":" + res[3]
+    // log("categ: " + categ + " helpstr: " + helpstr)
+    if len(mapres[categ]) == 0 {
+        mapres[categ] = {}
+    }
+    mapres[categ] =  mapres[categ] + {name: helpstr}
+}
+for c := mapres {
+    printf("\n| %s functions | |\n", c.key)
+    println("|--------------|-|")
+        for f := c.value {
+        println("| `" + f.key + "` | " + f.value)
+    }
+}
+
+println("--- End of List ---")

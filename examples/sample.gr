@@ -1,0 +1,38 @@
+/*
+   Sample file that our gorepl can interpret
+   This is a block commen
+   See also the other *.gr files
+*/
+unless = macro(cond, iffalse, iftrue) {
+    quote(if (!(unquote(cond))) {
+        unquote(iffalse)
+    } else {
+        unquote(iftrue)
+    })
+}
+
+unless(5 > 11, println("macro test 1: lower ok"), println("BUG: not lower"))
+
+unless(10 > 5, println("BUG: not greater"), println("macro test 2: greater")) // should output "macro test: greater" and not again "lower ok"
+
+// first class function objects, can also be written as `func fact(n) {` as shorthand
+// or fact = (n => ...) as a lambda short form.
+fact=func(n) {
+    log("called fact ", n) // log (timestamped stderr output)
+    if (n<=1) {
+        return 1
+    }
+    /* recursion: */ n*self(n-1) // also last evaluated expression is returned (ie return at the end is optional)
+}
+
+a=[fact(5), "abc", 76-3, sqrt(2)] // array can contain different types, grol also has math functions.
+
+m={"key": a, 73: 29} // so do maps
+
+println("m is:", m) // stdout print
+println("Outputting a smiley: 😀")
+
+first(m.key) // get the value from key from map, which is an array, and the first element of the array is our factorial 5
+// (dot notation .key is shorthand for ["key"]), could also have been first(m["key"]) or m["key"][0] or m.key[0]
+
+// ^^^ gorepl sample.gr should output 120

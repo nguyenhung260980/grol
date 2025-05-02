@@ -1,0 +1,416 @@
+# testscript framework tests for grol's main binary / command line
+
+# Basic usage test
+!grol -foo
+!stdout .
+stderr 'flag provided but not defined: -foo'
+
+# (short) version
+grol version
+stdout '^dev$'
+!stderr .
+
+# (long) version
+grol buildinfo
+stdout '^dev  go'
+stdout 'path	grol.io/grol'
+!stderr .
+
+# most basic expression
+grol -c '1+1'
+stdout '^2$'
+stderr welcome
+!stderr 'rror' # no Errors or other case/singular/plural
+
+# syntax error non mode, stdout doesn't repeat errors
+!grol -no-auto -c 'foo'
+stderr 'Total 1 error'
+stderr 'identifier not found: foo'
+!stdout .
+
+# sample_test.gr
+grol sample_test.gr
+!stderr 'Errors'
+cmp stdout sample_test_stdout
+stderr 'I] Running sample_test.gr'
+stderr 'called fact 5'
+stderr 'called fact 1'
+stderr 'I] All done'
+
+# macro output (there is a macro in sample_test.gr, it should show that stage with -parse)
+grol -parse sample_test.gr
+!stderr 'Errors'
+stdout '== Macro ==>'
+
+# no macro stage when no macro in the file:
+grol -parse fib_50.gr
+!stderr 'Errors'
+!stdout '== Macro ==>'
+stdout '12586269025\n'
+
+# fib_50.gr (redoing, checking exact match of output)
+grol fib_50.gr
+!stderr 'Errors'
+cmp stdout fib50_stdout
+stderr 'I] Running fib_50.gr'
+stderr 'I] All done'
+
+# Bug repro, return aborts the whole program
+grol -c 'f=func(){return 1;2};log(f());f();3'
+stdout '^1\n3$'
+!stderr '\[E\]'
+
+# lambda version of previous
+grol -c 'f=()=>{return 1;2};log(f());f();3'
+stdout '^1\n3$'
+!stderr '\[E\]'
+
+# same one more level
+grol -c 'f=func(n){if (n==5) {return 1};2};log(f(5));f(5);3'
+stdout '^1\n3$'
+!stderr '\[E\]'
+
+# lambda version of previous
+grol -c 'f=n=>{if (n==5) {return 1};2};log(f(5));f(5);3'
+stdout '^1\n3$'
+!stderr '\[E\]'
+
+# test bad macro as well as indirectly the error() builtin
+!grol -c 'm=macro(){};m()'
+stderr '<err: macro should return Quote. got=object.Null \({}\)>'
+
+# quiet mode and fast fibbonaci (log won't show)
+grol -quiet -c 'func fib(x){log("fib",x);if x<=1 {x} else {fib(x-1)+fib(x-2)}}; fib(92)'
+stdout '^7540113804746346429\n$'
+!stdout '\n\n'
+!stderr .
+
+# lambda version
+grol -quiet -c 'fib= x => if x<=1 {x} else {self(x-1)+self(x-2)}; fib(92)'
+stdout '^7540113804746346429\n$'
+!stdout '\n\n'
+!stderr .
+
+# variadic errors
+!grol -c 'func f(a,b,..){};f(1)'
+stderr 'wrong number of arguments for f. got=1, want at least=2'
+
+# variadic ok 1
+grol -quiet -c 'func f(a,b,..){println(a,b,..)};f(1,2)'
+stdout '1 2 \[]'
+!stderr .
+
+# variadic ok 2
+grol -quiet -c 'func f(a,b,..){println(a,b,..)};f(1,2,"ab",PI)'
+stdout '1 2 \["ab",3.141592653589793]'
+!stderr .
+
+# printf expands correctly
+grol -quiet -c 'printf("%d %s %.2f\n", 42, "ab\ncd", 1.5)'
+stdout '42 ab\ncd 1.50\n'
+!stderr .
+
+# eval() runs in the same context as when called
+grol -quiet -c 'a=1;eval("a=2");a'
+stdout '^2$'
+!stderr .
+
+# eval() runs in the same context as when called
+grol -quiet -c 'func foo(a) {eval("b=2");a+b};foo(1)'
+stdout '^3$'
+!stderr .
+
+# eval() runs in the same context as when called
+grol -quiet -c 'func foo(x) {eval("info")};foo("A")["stack"][0]'
+stdout '^{"x":true}$'
+!stderr .
+
+# json of (nested) arrays
+grol -quiet -c 'a=[1,2,3,["a", "b"],4];println(json(a))'
+stdout '^\[1,2,3,\["a","b"],4]$'
+!stderr .
+
+# dot notation and priority with functions
+grol -quiet -c 'n1={"f1":func(){println("f1")},"f2":func(x){x+1}}n1.f1()n1.f2(41)'
+stdout '^f1\n42$'
+!stderr .
+
+# lambda version
+grol -quiet -c 'n1={"f1":()=>println("f1"),"f2":(x)=>x+1}n1.f1()n1.f2(41)'
+stdout '^f1\n42$'
+!stderr .
+
+!grol -no-load-save -c 'save("foo.gr"); load("foo.gr")'
+stderr 'identifier not found: save'
+
+!grol -no-load-save -c 'load("foo.gr")'
+stderr 'identifier not found: load'
+
+!grol -restrict-io -c 'save("/tmp/foo.gr"); load("/tmp/foo.gr")'
+stderr 'invalid character in filename "/tmp/foo.gr": /'
+
+grol -restrict-io -c 'load("fib_50")'
+stdout '^12586269025\n$'
+stderr 'Read/evaluated: fib_50.gr'
+
+!grol -restrict-io -c 'load("./fib_50.gr")'
+stderr 'invalid character in filename "./fib_50.gr": \.'
+
+grol -c 'load("./fib_50.gr")'
+stdout '^12586269025\n$'
+stderr 'Read/evaluated: ./fib_50.gr'
+
+!grol -empty-only -c 'load("fib_50")'
+stderr 'empty only mode, filename must be empty or no arguments, got: "fib_50"'
+
+grol -empty-only -c 'save();load()'
+stderr 'Saved .* ids/fns to: .gr'
+stderr 'Read/evaluated: .gr'
+
+# max depth
+
+!grol -max-depth 12 -c 'func foo(n) {if n<=1 {1} else {self(n-1);n}}; foo(13)'
+stderr 'max depth 13 reached'
+
+grol -max-depth 12 -c 'func foo(n) {if n<=1 {1} else {self(n-1);n}}; foo(12)'
+stdout '^12$'
+!stderr 'max depth.*reached'
+
+# map don't mutate on append
+grol -quiet -c 'm={2:"b"};n={1:"a"};println(m+n); println(m)'
+stdout '^{1:"a",2:"b"}\n{2:"b"}$'
+!stderr .
+
+grol -quiet -c 'm={1:1, nil:"foo"}; println(m+{nil:"bar"}); m'
+stdout '^{1:1,nil:"bar"}\n{1:1,nil:"foo"}$'
+!stderr .
+
+# int
+grol -quiet -c 'print(int("0xff"), int(PI))'
+stdout '^255 3$'
+!stderr .
+
+# short circuiting
+grol -quiet -c 'if true || println("not ran") {println("is true")}'
+stdout '^is true$'
+!stderr .
+!stdout 'not ran'
+
+grol -quiet -c 'if false && println("not ran") {true} else {println("is false")}'
+stdout '^is false$'
+!stderr .
+!stdout 'not ran'
+
+# parse error context not crashing
+!grol -quiet -panic -c '^&@%%^!%^&^&!%^%^&!'
+stderr 'parser error'
+!stderr panic
+
+!grol -quiet -panic -c '@'
+!stderr panic
+!stderr NIL_TOKEN
+!stderr '\[CRI\]'
+stderr 'parser error'
+stderr '@'
+
+# range
+grol -quiet -c '(23:31)[4:]'
+stdout '^\[27,28,29,30\]$'
+
+# range
+grol -quiet -c '(23:31)[5-1:23-24]'
+stdout '^\[27,28,29\]$'
+
+# crash on weird half function body
+!grol -quiet -c '(x) {1'
+stderr 'Incomplete input'
+!stderr 'panic'
+!stderr 'runtime error: invalid memory'
+
+# no crash on empty param list in lambda short form.
+grol -quiet -c '(()=>1)()'
+stdout '^1$'
+
+# no crash on map unwraps
+grol -quiet -c 'printf("%v\n", {"abc":42,"def":62, "x": {[3]:122, true:false} })'
+stdout '^map\[abc:42 def:62 x:map\[\[3\]:122 true:false\]\]$'
+
+# json despite non string keys
+grol -quiet -c 'println(json_go({"abc":42, 63:63, "x": {[3]:122, true:false} }))'
+stdout '^{"63":63,"abc":42,"x":{"\[3\]":122,"true":false}}$'
+
+# pretty print variant
+grol -quiet -c 'print(json_go({"abc":42, 63:63, "x": {[3]:122, true:false} }, "  "))'
+cmp stdout json_output
+
+# returning a map in lambda shouldn't lose needed extra {} despite being solo argument
+grol -quiet -c '()=>{{"a":1,"b":2}}'
+stdout '^\(\)=>{{"a":1,"b":2}}$'
+
+# if extra paren are needed (like for a[x] in the left part of if condition) it should still parse.
+# note: no extra paren anymore.
+grol -quiet -c '()=> if 1+2 == 3 {4}'
+stdout '^\(\)=>if 1\+2==3\{4\}$'
+
+grol -quiet -c '(()=> if 1+2==3 {4})()'
+stdout '^4$'
+
+# lamda chaining:
+grol -quiet -c '(()=>a=>b=>c=>a+b+c)()(1)(2)(3)'
+stdout '^6$'
+
+grol -quiet -c '(()=>a=>b=>()=>c=>a+b+c)()(1)(2)()(3)'
+stdout '^6$'
+
+grol -quiet -c 'f= a=>b=>(x,y)=>c=>a+b+c+x+y;f(1)(2)(4,5)(3)'
+stdout '^15$'
+
+# stack trace in errors
+!grol -quiet -c 'func level1(){1+"x"}; func level2(){level1()}; func level3(){level2()}; level3()'
+stderr 'Total 1 error'
+stderr '^<err: no PLUS on left=1 right="x", stack below:>$'
+stderr '^func level1\(\){1\+"x"}$'
+stderr '^func level2\(\){level1\(\)}$'
+stderr '^func level3\(\){level2\(\)}$'
+
+!grol -quiet -c 'func level1(){1+"x"}; level1()'
+stderr 'Total 1 error'
+stderr '^<err: no PLUS on left=1 right="x" in func level1\(\){1\+"x"}>$'
+
+# json with some functions
+grol -quiet -c 'f=()=>{{"k":"v"}}; println(json_go(f))'
+!stderr 'json: unsupported type'
+!stdout 'json: unsupported type'
+stdout '^"\(\)=>{{\\"k\\":\\"v\\"}}"$'
+
+# prefix operator single error (used to be <err: bitwise not of <err: bitwise not of <err: bitwise not of 1.1>>>)
+!grol -quiet -c '~~~1.1'
+stderr 'Total 1 error'
+stderr '^<err: bitwise not of 1.1>$'
+
+# negative repeat of string shouldn't panic
+!grol -quiet -c '"abc" * -3'
+!stderr 'panic'
+
+# time parse round trip
+grol -quiet -c 'now=time.now(); time.parse(time.info(now).str) == now'
+
+# reference changing parent:
+grol -quiet -c 'v=42;func foo(){v=8};foo();v'
+stdout '^8$'
+
+# define not changing parent
+grol -quiet -c 'v=42;func foo(){v:=v;v=8};println(foo()); v'
+stdout '^8\n42$'
+
+# crash on self ref
+grol -quiet -c 'v=42;func foo(){v=v}; foo()'
+stdout '^42$'
+
+# 2 step ref loop
+grol -quiet -c 'a=-3; b=5; ()=>{b=a;a=b;b++;a++}();[a,b]'
+stdout '^\[-2,-2\]$'
+
+# 2nd aliasing crashes
+grol -quiet -c 'a=1; b=2;()=>{a=b}();()=>{a=b;println(type(a),type(b))}()'
+stdout '&a.\(INTEGER\) &b.\(INTEGER\)'
+
+# test of first() and rest() back to function through defun().
+grol -quiet -c 'defun("prtf", first(printf), rest(printf)); prtf("%d %c", 42, 65)'
+stdout '^42 A$'
+
+# test of format.
+grol -quiet -c 'println(format(printf))'
+cmp stdout println_output
+
+# catch errors
+grol -quiet -c 'catch("1"+a).err'
+stdout '^true$'
+
+# catch errors
+grol -quiet -c 'catch("1"+a).value'
+stdout '^"unknown operator: STRING PLUS INTEGER"$'
+
+# catch no error
+grol -quiet -c 'catch("1"+"2")'
+stdout '^{"err":false,"value":"12"}$'
+
+grol -quiet -c 'regsub(`^([^\.]+)\.c$`,"afile.c","cc -c $0 -o $1.o")'
+stdout '^"cc -c afile.c -o afile.o"$'
+
+grol -quiet -c 'regexp(`(?i)^abc$`,"ABC")'
+stdout '^true$'
+
+grol -quiet -c 'regexp(`^abc$`,"ABC")'
+stdout '^false$'
+
+# URL regexp [all host p port what key]
+grol -quiet -c 'url="http://debug.fortio.org:80/abc?foo=bar#anchor"; regexp(`^http://([^/:]+)(:([^/]*))?(/[^#]*)?(#.*)?$`, url, true)'
+stdout '^\["http://debug.fortio.org:80/abc\?foo=bar#anchor","debug.fortio.org",":80","80","/abc\?foo=bar","#anchor"\]$'
+
+-- println_output --
+func (fmtstr, ..) {
+	print(sprintf(fmtstr, ..))
+}
+-- json_output --
+{
+  "63": 63,
+  "abc": 42,
+  "x": {
+    "[3]": 122,
+    "true": false
+  }
+}
+-- sample_test.gr --
+// Sample file that our gorepl can interpret
+// <--- comments
+// See also the other *.gr files
+
+unless = macro(cond, iffalse, iftrue) {
+    quote(if (!(unquote(cond))) {
+        unquote(iffalse)
+    } else {
+        unquote(iftrue)
+    })
+}
+
+unless(10 > 5, print("BUG: not greater\n"), print("macro test: greater\n"))
+
+fact= n => { // could be func(n) instead of n => short lambda form
+    log("called fact", n) // log (timestamped stderr output)
+    if (n<=1) {
+        return 1
+    }
+    n*fact(n-1) // recursion, also last evaluated expression is returned (ie return at the end is optional)
+}
+
+a=[fact(5), "abc", 76-3] // array can contain different types
+
+m={"key": a, 73: 29} // so do maps
+
+println("m is:", m) // stdout print
+println("Outputting a smiley: 😀")
+
+first(m["key"]) // get the value from key from map, which is an array, and the first element of the array is our factorial 5
+// could also have been m["key"][0]
+
+// ^^^ gorepl sample.gr should output 120
+
+-- fib_50.gr --
+fib = func(x) {
+	if (x == 0) {
+		return 0
+	}
+	if (x == 1) {
+		return 1
+	}
+	self(x - 1) + self(x - 2)
+}
+fib(50)
+-- sample_test_stdout --
+macro test: greater
+m is: {73:29,"key":[120,"abc",73]}
+Outputting a smiley: 😀
+120
+-- fib50_stdout --
+12586269025

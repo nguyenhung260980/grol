@@ -1,0 +1,17 @@
+/*
+ Γ(x + 1/2) ~ Γ(x)x^(1/2) = (x-1)!√x
+ Γ(x + 1/2) = (2x - 1)!! * 2^-x * √π
+*/
+f = func(i, n, prod) {
+	//log(i, prod)
+	if i == n+1 {
+		return 1. / (prod * prod * n)
+	}
+	self(i+1, n, prod*(1-1./(2*i)))
+}
+n = 149_990 // close to 150_000 default limit.
+now = time.now()
+pi = f(1, n, 1)
+elapsed = time.now() - now
+log("calculated pi = ", pi, " in ", elapsed, " seconds")
+pi

@@ -1,0 +1,19 @@
+// Another example (see sample.gr)
+// Variant with accumulation of result down the stack
+
+a = [ 1, 3, 5, 7] // or run `gorepl -shared-state *.gr` and you can comment this out (a defined in apply.gr)
+
+func apply(f, a) {
+    // helper function
+    h = (f, a, result) => {
+        if (len(a) == 0) {
+            return result
+        }
+        return self(f, rest(a), result + f(first(a)))
+    }
+    h(f, a, [])
+}
+
+apply(x => 2 * x, a)
+
+// ^^^ [2, 6, 10, 14]

@@ -1,0 +1,187 @@
+<!--
+  Keep grol/wasm/grol_wasm.html and web-site/_includes/grol_wasm.html in sync
+  Using `make sync` in web-site/
+  make wasm to test changes
+  make wasm-release once tagged (before the sync above copies a non release wasm)
+-->
+<style>
+    body {
+        font-family: Arial, sans-serif;
+        margin: 20px;
+    }
+
+    .container {
+        display: flex;
+        flex-direction: column;
+        gap: 10px;
+    }
+
+    textarea,
+    label,
+    div {
+        font-size: 14px;
+        width: 100%;
+        box-sizing: border-box;
+    }
+
+    button {
+        align-self: flex-start;
+    }
+
+    label {
+        margin-bottom: 5px;
+    }
+
+    .error-textarea {
+        color: red;
+    }
+</style>
+<script src="/wasm_exec.js"></script>
+<script>
+    function debounce(func) {
+        let timeout
+        return function (...args) {
+            const context = this
+            clearTimeout(timeout)
+            timeout = setTimeout(() => func.apply(context, args), 100) // 100ms debounce
+        }
+    }
+    if (!WebAssembly.instantiateStreaming) { // polyfill
+        WebAssembly.instantiateStreaming = async (resp, importObject) => {
+            const source = await (await resp).arrayBuffer();
+            return await WebAssembly.instantiate(source, importObject);
+        };
+    }
+    const go = new Go();
+    let mod, inst;
+    WebAssembly.instantiateStreaming(fetch("/grol.wasm"), go.importObject).then((result) => {
+        mod = result.module;
+        inst = result.instance;
+        document.getElementById("runButton").disabled = false;
+    }).catch((err) => {
+        console.error(err);
+    });
+    function resizeTextarea(textarea) {
+        textarea.style.height = 'auto';
+        textarea.style.height = (textarea.scrollHeight) + 'px';
+    }
+    function formatError(error) {
+        return `Error: ${error.message}`;
+    }
+    let isRunning = false
+    async function run() {
+        if (isRunning) return; // Prevent running multiple times concurrently
+        isRunning = true;
+        document.getElementById("runButton").disabled = true; // Disable button during execution
+        try {
+            // console.clear();
+            console.log('In run')
+            go.run(inst)
+            var input = document.getElementById('input').value
+            var compact = document.getElementById('compact').checked
+            // Call the grol function with the input
+            var output = grol(input, compact);
+            console.log('Eval done:');
+            console.log(output);
+            if (output && output.result !== undefined) {
+                // Write the result to the output textarea
+                document.getElementById('output').value = output.result;
+                document.getElementById('input').value = output.formatted;
+                document.getElementById('errors').value = output.errors.join("\n")
+                if (output.image !== undefined) {
+                    document.getElementById('image').src = output.image
+                } else {
+                    var img = document.getElementById('image')
+                    img.src = "data:image/gif;base64,R0lGODlhAQABAIAAAAAAAP///ywAAAAAAQABAAACAUwAOw=="
+                }
+            } else {
+                document.getElementById('errors').value = "Unexpected runtime error, see JS console";
+            }
+            document.getElementById('version').innerHTML = "GROL " + grolVersion;
+        } catch (e) {
+            console.error(e);
+            const formattedError = formatError(e);
+            document.getElementById('errors').value = formattedError;
+        } finally {
+            inst = await WebAssembly.instantiate(mod, go.importObject)
+            console.log('Instance reset:', inst)
+            if (isRunning) {
+                isRunning = false; // Allow running again after reset
+                document.getElementById("runButton").disabled = false; // Re-enable the button
+            }
+        }
+        resizeTextarea(document.getElementById('input'));
+        resizeTextarea(document.getElementById('output'));
+        resizeTextarea(document.getElementById('errors'));
+    }
+    const debounceRun = debounce(run)
+    document.addEventListener('DOMContentLoaded', (event) => {
+        document.getElementById('input').addEventListener('keydown', function (e) {
+            if (e.key === 'Enter' && !isRunning) {
+                debounceRun();
+            }
+        });
+    });
+
+</script>
+
+<div>
+    <label for="input">Edit the sample/Enter your GROL code here:</label>
+    <textarea id="input" rows="12" cols="80">
+println("Outputting a smiley: 😀")
+func fact(n) {   // function example, name is optional
+  log("called fact ", n)  // log output
+// parenthesis are optional:
+  if (n<=1) {
+    return 1
+  }
+  n*fact(n-1) // recursion
+}
+a=[fact(5), "abc", sqrt(2)] // heterogeneous array, math functions
+  /* maps also can have any key,value types: */
+m={"str key": a, PI: "pi", 42: "str val", 1e3: "a lot"}</textarea>
+</div>
+<div>
+    Hit enter or click <button onClick="debounceRun()" id="runButton" disabled>Run</button> (will also format the code,
+    also
+    try <input type="checkbox" id="compact">compact)
+    <button id="addParamButton">Share</button>
+    <script>
+        document.getElementById('addParamButton').addEventListener('click', () => {
+            const paramValue = document.getElementById('input').value
+            const url = new URL(window.location)
+            function customEscape(str) {
+                return str.replace(/%/g, '%2525')
+                    .replace(/\+/g, '%2B')
+                    .replace(/ /g, '+')
+                    .replace(/\n/g, '%0A')
+                    .replace(/\t/g, '%09')
+                    .replace(/</g, '%3C')
+            }
+            const encodedValue = customEscape(paramValue)
+            const newUrl = `${url.origin}${url.pathname}?c=${encodedValue}`
+            window.history.pushState({}, '', newUrl)
+        });
+    </script>
+
+</div>
+<div>
+    <label for="output">Result:</label>
+    <br />
+    <img id="image" src="" alt="Image output (if any)">
+    <br />
+    <textarea id="output" rows="2" cols="80"></textarea>
+</div>
+<div>
+    <label for="errors">Errors:</label>
+    <textarea id="errors" rows="1" cols="80" class="error-textarea"></textarea>
+</div>
+<div id="version">GROL</div>
+<script>
+    const urlParams = new URLSearchParams(window.location.search)
+    const paramValue = urlParams.get('c')
+    console.log('paramValue', paramValue)
+    if (paramValue) {
+        document.getElementById('input').value = decodeURIComponent(paramValue)
+    }
+</script>
